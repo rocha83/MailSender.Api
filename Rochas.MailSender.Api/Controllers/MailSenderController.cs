@@ -25,7 +25,8 @@ namespace Rochas.MailSender.Api.Controllers
 		}
 
 		[HttpPost]
-		public async Task<IActionResult> SendMessage(ContactRequest request)
+		[Route("SendMessage")]
+		public async Task<IActionResult> SendMessage(MessageRequest request)
 		{
 			MailSendResult result;
 			if (request == null)
@@ -36,13 +37,39 @@ namespace Rochas.MailSender.Api.Controllers
 				var smtpConfig = GetSmtpConfig();
 				using (var mailer = new Net.Connectivity.MailSender(smtpConfig))
 				{
-					request.Subject = $"{request.Company} - Contact of {request.Name}";
-					var phone = request.PhoneNumber.HasValue ? request.PhoneNumber.Value : 0;
-					var msgBody = string.Concat("Phone: ", phone.ToPhoneNumber(), Environment.NewLine,
+					result = await mailer.SendMessage(request.To, request.Subject, request.Message, request.From, request.Sender);
+
+					return Ok(result);
+				}
+			}
+			catch (Exception ex)
+			{
+				var errorResume = ex.GetResume();
+				WriteErrorLog(errorResume);
+
+				return RedirectToAction("Error", "Home", new { errorResume });
+			}
+		}
+
+		[HttpPost]
+		[Route("SendContactMessage")]
+		public async Task<IActionResult> SendContactMessage(ContactRequest request)
+		{
+			MailSendResult result;
+			if (request == null)
+				return BadRequest();
+
+			try
+			{
+				var smtpConfig = GetSmtpConfig();
+				using (var mailer = new Net.Connectivity.MailSender(smtpConfig))
+				{
+					request.Subject = $"Contact of {request.Name}";
+					var msgBody = string.Concat("Phone: ", request.PhoneNumber.ToPhoneNumber(), Environment.NewLine,
 												"E-mail: ", request.Email, Environment.NewLine,
 												Environment.NewLine, "Message : ", request.Message);
 
-					result = await mailer.SendMessage(smtpConfig.DefaultSender, request.Subject, msgBody);
+					result = await mailer.SendMessage(smtpConfig.DefaultSender, request.Subject, msgBody, companyName: request.Company);
 
 					return Ok(result);
 				}
